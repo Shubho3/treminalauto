@@ -1,12 +1,20 @@
 package com.pay.treminalauto;
 
+import android.app.Dialog;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.fragment.app.FragmentActivity;
+import androidx.lifecycle.MutableLiveData;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.pay.treminalauto.network.ApiClient;
 import com.pay.treminalauto.network.TokenProvider;
@@ -39,7 +47,9 @@ import java.util.List;
 
 import okhttp3.ResponseBody;
 
-public class MainActivity extends AppCompatActivity implements DiscoveryListener {
+public class MainActivity extends AppCompatActivity implements DiscoveryListener , ReaderssAdapter.OnClicked {
+
+    public static final String TAG = "MainActivity";
     @NotNull
     private static final String AMOUNT =
             "com.stripe.example.fragment.event.EventFragment.amount";
@@ -63,8 +73,6 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
             "com.stripe.example.fragment.event.EventFragment.extended_auth";
 
     private static final boolean DO_NOT_ENABLE_MOTO = false;
-    private boolean ISPAYMENTDONE = false;
-    public static final String TAG = "MainActivity";
     final Callback discoveryCallback = new Callback() {
         @Override
         public void onSuccess() {
@@ -78,37 +86,6 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
             Log.e(TAG, "onFailure: " + e.getCause());
         }
     };
-    public Cancelable discoveryTask;
-    @Nullable
-    public Cancelable collectTask;
-
-    public List<Reader> readerList = new ArrayList<>();
-    DiscoveryConfiguration config;
-    private PaymentIntent paymentIntent;
-    @NotNull
-    private final PaymentIntentCallback processPaymentCallback = new PaymentIntentCallback() {
-        @Override
-        public void onSuccess(@NotNull PaymentIntent paymentIntent) {
-            try {
-
-
-              ResponseBody v =  ApiClient.capturePaymentIntent(paymentIntent.getId());
-                Log.e(TAG, "onSuccess: "+v.byteString() );
-                Log.e(TAG, "onSuccess: "+v.byteString() );
-                //PlaceOrderApi();
-              //  completeFlow();
-            } catch (IOException e) {
-                Log.e("StripeExample", e.getMessage(), e);
-               // completeFlow();
-            }
-        }
-
-        @Override
-        public void onFailure(@NotNull TerminalException e) {
-            Log.e(TAG, "onFailure: "+e.getLocalizedMessage() );
-        }
-    };
-
     @NotNull
     private final PaymentIntentCallback cancelPaymentIntentCallback = new PaymentIntentCallback() {
         @Override
@@ -118,10 +95,37 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
 
         @Override
         public void onFailure(@NotNull TerminalException e) {
-            Log.e(TAG, "onFailure: "+e.getLocalizedMessage() );
+            Log.e(TAG, "onFailure: " + e.getLocalizedMessage());
         }
     };
+    public Cancelable discoveryTask;
+    @Nullable
+    public Cancelable collectTask;
+    public List<Reader> readerList = new ArrayList<>();
+    MutableLiveData<String> status = new MutableLiveData<>("Loading...");
+    @NotNull
+    private final PaymentIntentCallback processPaymentCallback = new PaymentIntentCallback() {
+        @Override
+        public void onSuccess(@NotNull PaymentIntent paymentIntent) {
+            try {
 
+                runOnUiThread(() -> status.setValue("1$  Recieved"));
+                ResponseBody v = ApiClient.capturePaymentIntent(paymentIntent.getId());
+                Log.e(TAG, "onSuccess: " + v.byteString());
+                Log.e(TAG, "onSuccess: " + v.byteString());
+                PlaceOrderApi();
+                //  completeFlow();
+            } catch (IOException e) {
+                Log.e("StripeExample", e.getMessage(), e);
+                // completeFlow();
+            }
+        }
+
+        @Override
+        public void onFailure(@NotNull TerminalException e) {
+            Log.e(TAG, "onFailure: " + e.getLocalizedMessage());
+        }
+    };
     @NotNull
     private final PaymentIntentCallback collectPaymentMethodCallback = new PaymentIntentCallback() {
         @Override
@@ -132,16 +136,21 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
 
         @Override
         public void onFailure(@NotNull TerminalException e) {
-            Log.e(TAG, "onFailure: "+e.getLocalizedMessage() );
+            Log.e(TAG, "onFailure: " + e.getLocalizedMessage());
 
         }
     };
-
+    DiscoveryConfiguration config;
+    private boolean ISPAYMENTDONE = false;
+    private TextView text_view;
+    private PaymentIntent paymentIntent;
+    private Dialog dialogq;
     @NotNull
     private final PaymentIntentCallback createPaymentIntentCallback = new PaymentIntentCallback() {
         @Override
         public void onSuccess(@NotNull PaymentIntent intent) {
             paymentIntent = intent;
+            runOnUiThread(() -> status.setValue(" Getting Payment of  1$"));
             final Bundle bundle = new Bundle();
             bundle.putLong(AMOUNT, 100);
             bundle.putString(CURRENCY, "usd");
@@ -162,15 +171,26 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
 
         @Override
         public void onFailure(@NotNull TerminalException e) {
-            Log.e(TAG, "onFailure: "+e.getLocalizedMessage());;
+            Log.e(TAG, "onFailure: " + e.getLocalizedMessage());
+            ;
         }
     };
 
+    private void PlaceOrderApi() {
+
+        Log.e(TAG, "PlaceOrderApi:  Payment Done   ");
+        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Payment Done", Toast.LENGTH_SHORT).show());
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        text_view = findViewById(R.id.text_view);
+
+        status.observe(this, s -> {
+            runOnUiThread(() -> text_view.setText(s));
+        });
         try {
             TerminalApplicationDelegate.onCreate(getApplication());
         } catch (Exception e) {
@@ -183,7 +203,7 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
 
             Log.e("TAG", "requestPermissionsIfNecessarySdkBelow31:initialize ");
             try {
-                Terminal.initTerminal(MainActivity.this, LogLevel.NONE, new TokenProvider(),
+                Terminal.initTerminal(MainActivity.this, LogLevel.VERBOSE, new TokenProvider(),
                         new TerminalEventListener());
                 config = new DiscoveryConfiguration(
                         0, DiscoveryMethod.INTERNET
@@ -194,6 +214,8 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
                                     .getInstance()
                                     .discoverReaders(config, this, discoveryCallback);
                 }
+                runOnUiThread(() -> status.setValue("Getting ready ..."));
+
             } catch (TerminalException e) {
                 Log.e("TAG", "initialize: " + e.getMessage());
                 Log.e("TAG", "initialize: " + e.getLocalizedMessage());
@@ -207,34 +229,85 @@ public class MainActivity extends AppCompatActivity implements DiscoveryListener
     @Override
     public void onUpdateDiscoveredReaders(@NonNull List<Reader> list) {
         this.readerList = list;
-        if (readerList.size() > 0) {
-            Terminal.getInstance().connectInternetReader(
-                    readerList.get(0),
-                    new ConnectionConfiguration.InternetConnectionConfiguration(),
-                    new ReaderCallback() {
-                        @Override
-                        public void onSuccess(@NonNull Reader reader) {
-                            Log.e(TAG, "onSuccess: "+reader.getIpAddress() );
-                            Log.e(TAG, "onSuccess: "+reader.getId() );
-                            CardPresentParameters.Builder cardPresentParametersBuilder = new CardPresentParameters.Builder();
-                            PaymentMethodOptionsParameters paymentMethodOptionsParameters = new PaymentMethodOptionsParameters.Builder()
-                                    .setCardPresentParameters(cardPresentParametersBuilder.build())
-                                    .build();
-                            final PaymentIntentParameters params = new PaymentIntentParameters.Builder()
-                                    .setAmount(100)
-                                    .setCurrency("usd")
-                                    .setPaymentMethodOptionsParameters(paymentMethodOptionsParameters)
-                                    .build();
-                            Terminal.getInstance().createPaymentIntent(params, createPaymentIntentCallback);
-                        }
-                        @Override
-                        public void onFailure(@NonNull TerminalException e) {
-                            Log.e(TAG, "onFailure: "+e.getCause() );
-                            Log.e(TAG, "onFailure: "+e.getMessage() );
-                            Log.e(TAG, "onFailure: "+e.getLocalizedMessage() );
-                        }
-                    }
-            );
+        if (readerList.size() >0) {
+
+            discoveryTask.cancel(discoveryCallback);
+            runOnUiThread(() -> {
+                Log.e(TAG, "onUpdateDiscoveredReaders:--- " + readerList.size());
+                 for (Reader reader :readerList){
+                     Log.e(TAG, "onUpdateDiscoveredReaders:--- " + reader.getLabel());
+                 }
+                 dialogq = new Dialog(MainActivity.this);
+                dialogq.requestWindowFeature(Window.FEATURE_NO_TITLE);
+                dialogq.getWindow().getAttributes().windowAnimations = android.R.style.Widget_Material_ListPopupWindow;
+                dialogq.setContentView(R.layout.reders_list_dialog);
+                WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+                Window window = dialogq.getWindow();
+                lp.copyFrom(window.getAttributes());
+                Button ivCancel = dialogq.findViewById(R.id.btncncel);
+                RecyclerView recycle = dialogq.findViewById(R.id.recycle);
+               ivCancel.setOnClickListener(D -> {
+                    dialogq.dismiss();
+                });
+                ReaderssAdapter  adapter = new ReaderssAdapter(MainActivity.this,this::onItemClicked);
+                recycle.setAdapter(adapter);
+                adapter.updateEvents(readerList);
+                lp.width = WindowManager.LayoutParams.WRAP_CONTENT;
+                lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                window.setAttributes(lp);
+                dialogq.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                dialogq.show();
+
+               // status.setValue("connect to Reader ");
+            });
+
+        } else {
+
+
+
+            runOnUiThread(() -> {
+                Toast.makeText(MainActivity.this, "No reader Available", Toast.LENGTH_SHORT).show();
+
+
+
+            });
+
         }
+    }
+
+
+    @Override
+    public void onItemClicked(Reader id) {
+        dialogq.dismiss();
+        Terminal.getInstance().connectInternetReader(
+               id,
+                new ConnectionConfiguration.InternetConnectionConfiguration(),
+                new ReaderCallback() {
+                    @Override
+                    public void onSuccess(@NonNull Reader reader) {
+                        Log.e(TAG, "onSuccess: " + reader.getIpAddress());
+                        Log.e(TAG, "onSuccess: " + reader.getId());
+                        runOnUiThread(() -> status.setValue("connected"));
+                        CardPresentParameters.Builder cardPresentParametersBuilder = new CardPresentParameters.Builder();
+                        PaymentMethodOptionsParameters paymentMethodOptionsParameters = new PaymentMethodOptionsParameters.Builder()
+                                .setCardPresentParameters(cardPresentParametersBuilder.build())
+                                .build();
+                        final PaymentIntentParameters params = new PaymentIntentParameters.Builder()
+                                .setAmount(100)
+                                .setCurrency("usd")
+                                .setPaymentMethodOptionsParameters(paymentMethodOptionsParameters)
+                                .build();
+                        Terminal.getInstance().createPaymentIntent(params, createPaymentIntentCallback);
+                    }
+
+                    @Override
+                    public void onFailure(@NonNull TerminalException e) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, "Error" + e.getLocalizedMessage(), Toast.LENGTH_SHORT).show());
+                        Log.e(TAG, "onFailure: " + e.getCause());
+                        Log.e(TAG, "onFailure: " + e.getMessage());
+                        Log.e(TAG, "onFailure: " + e.getLocalizedMessage());
+                    }
+                }
+        );
     }
 }
